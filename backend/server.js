@@ -4,7 +4,6 @@ dotenv.config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const { createAdapter } = require('@socket.io/redis-adapter');
 const cors = require('cors');
 const aiRoutes = require('./routes/aiRoutes');
 const authRoutes = require('./routes/authRoutes');
@@ -14,7 +13,6 @@ const deploymentRoutes = require('./routes/deploymentRoutes');
 const connectDB = require('./config/db');
 const passport = require('./config/passport');
 const prisma = require('./config/prisma');
-const redis = require('./config/redis');
 const { spawnContainer, isDockerAvailable } = require('./utils/dockerManager');
 
 const app = express();
@@ -26,10 +24,21 @@ const io = new Server(server, {
   }
 });
 
-// Configure Socket.IO Redis Adapter
-const pubClient = redis;
-const subClient = pubClient.duplicate();
-io.adapter(createAdapter(pubClient, subClient));
+// Configure Socket.IO Redis Adapter (optional — skipped if REDIS_URL not set)
+if (process.env.REDIS_URL) {
+  try {
+    const { createAdapter } = require('@socket.io/redis-adapter');
+    const redis = require('./config/redis');
+    const pubClient = redis;
+    const subClient = pubClient.duplicate();
+    io.adapter(createAdapter(pubClient, subClient));
+    console.log('[Redis] Socket.IO Redis adapter connected');
+  } catch (err) {
+    console.warn('[Redis] Adapter failed to load, running without Redis:', err.message);
+  }
+} else {
+  console.log('[Redis] REDIS_URL not set — running Socket.IO without Redis adapter (single instance mode)');
+}
 
 app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173', credentials: true }));
 app.use(express.json());
